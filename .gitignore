@@ -4,6 +4,7 @@ data/counter-fitted-vectors.txt
 data/glove
 data/lm_scores
 data/snli
+outputs
 
 # LM
 windweller-l2w

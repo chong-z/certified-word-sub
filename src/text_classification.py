@@ -517,7 +517,7 @@ class GeneticAdversary(Adversary):
           parent1 = population[np.random.choice(range(len(population)), p=sample_probs)][0]
           parent2 = population[np.random.choice(range(len(population)), p=sample_probs)][0]
           child = [random.sample([w1, w2], 1)[0] for (w1, w2) in zip(parent1, parent2)]
-          child_mut, new_margin = self.perturb(child, choices, model, y, 
+          child_mut, new_margin = self.perturb(child, choices, model, y,
                                                dataset.vocab, device)
           new_population.append((child_mut, new_margin))
         population = new_population
@@ -541,15 +541,17 @@ def load_datasets(device, opts):
     - word_mat: torch.Tensor
     - attack_surface: AttackSurface - defines the adversarial attack surface
   """
-  data_class = ToyClassificationDataset if opts.use_toy_data else IMDBDataset
+  data_class = ToyClassificationDataset if opts.use_toy_data else SST2Dataset
   try:
     with open(os.path.join(opts.data_cache_dir, 'train_data.pkl'), 'rb') as infile:
       train_data = pickle.load(infile)
-      if not isinstance(train_data, data_class):
+      # Only check the class name. We want to share the cache between libs.
+      if type(train_data).__name__ != data_class.__name__:
           raise Exception("Cached dataset of wrong class: {}".format(type(train_data)))
     with open(os.path.join(opts.data_cache_dir, 'dev_data.pkl'), 'rb') as infile:
       dev_data = pickle.load(infile)
-      if not isinstance(dev_data, data_class):
+      # Only check the class name. We want to share the cache between libs.
+      if type(dev_data).__name__ != data_class.__name__:
           raise Exception("Cached dataset of wrong class: {}".format(type(train_data)))
     with open(os.path.join(opts.data_cache_dir, 'word_mat.pkl'), 'rb') as infile:
       word_mat = pickle.load(infile)
@@ -641,7 +643,7 @@ def load_model(word_mat, device, opts):
   if opts.load_dir:
     try:
       if opts.load_ckpt is None:
-        load_fn = sorted(glob.glob(os.path.join(opts.load_dir, 'model-checkpoint-[0-9]+.pth')))[-1]
+        load_fn = sorted(glob.glob(os.path.join(opts.load_dir, 'model-checkpoint-*.pth')))[-1]
       else:
         load_fn = os.path.join(opts.load_dir, 'model-checkpoint-%d.pth' % opts.load_ckpt)
       print('Loading model from %s.' % load_fn)
@@ -683,7 +685,7 @@ class TextClassificationDataset(data_util.ProcessedDataset):
   Dataset that holds processed example dicts
   """
   @classmethod
-  def from_raw_data(cls, raw_data, vocab, attack_surface=None, truncate_to=None, 
+  def from_raw_data(cls, raw_data, vocab, attack_surface=None, truncate_to=None,
                     downsample_to=None, downsample_shard=0):
     if downsample_to:
       raw_data = raw_data[downsample_shard * downsample_to:(downsample_shard+1) * downsample_to]
@@ -697,11 +699,17 @@ class TextClassificationDataset(data_util.ProcessedDataset):
         choices = [[w] + cur_swaps for w, cur_swaps in zip(words, swaps)]
       else:
         words = [w for w in all_words if w in vocab]  # Delete UNK words
+
+      # The input may be a single out-of-vocab word.
+      is_oov_example = (len(words) == 0)
+      if is_oov_example:
+        words = [vocabulary.NULL_TOKEN]
+
       if truncate_to:
         words = words[:truncate_to]
       word_idxs = [vocab.get_index(w) for w in words]
       x_torch = torch.tensor(word_idxs).view(1, -1, 1) # (1, T, d)
-      if attack_surface:
+      if attack_surface and not is_oov_example:
         choices_word_idxs = [
           torch.tensor([vocab.get_index(c) for c in c_list], dtype=torch.long) for c_list in choices
         ]
@@ -758,7 +766,7 @@ class ToyClassificationDataset(TextClassificationDataset):
   Dataset that holds a toy sentiment classification data
   """
   VOCAB_LIST = [
-      'cat', 'dog', 'fish', 'tiger', 'chicken', 
+      'cat', 'dog', 'fish', 'tiger', 'chicken',
       'hamster', 'bear', 'lion', 'dragon', 'horse',
       'monkey', 'goat', 'sheep', 'goose', 'duck']
   @classmethod
@@ -834,6 +842,32 @@ class IMDBDataset(TextClassificationDataset):
       dev_data = cls.read_text(imdb_dir, 'test')
     else:
       dev_data = cls.read_text(imdb_dir, 'dev')
+    return RawClassificationDataset(train_data, dev_data)
+
+
+class SST2Dataset(TextClassificationDataset):
+  """
+  Dataset that holds the IMDB sentiment classification data
+  """
+  @classmethod
+  def read_text(cls, imdb_dir, split):
+    import nlp
+
+    dataset = nlp.load_dataset('glue', 'sst2')[split]
+    data = [(e['sentence'], e['label']) for e in dataset]
+    num_pos = sum(y for x, y in data)
+    num_neg = sum(1 - y for x, y in data)
+    print('Read %d examples (+%d, -%d)' % (
+        len(data), num_pos, num_neg))
+    return data
+
+  @classmethod
+  def get_raw_data(cls, imdb_dir, test=False):
+    train_data = cls.read_text(imdb_dir, 'train')
+    if test:
+      dev_data = cls.read_text(imdb_dir, 'test')
+    else:
+      dev_data = cls.read_text(imdb_dir, 'validation')
     return RawClassificationDataset(train_data, dev_data)
 
 

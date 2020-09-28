@@ -143,9 +143,9 @@ def train(task_class, model, train_data, num_epochs, lr, device, dev_data=None,
       if augmenter:
         all_epoch_stats['acc']['dev']['aug'].append(dev_results['aug_acc'])
       dev_stats = {
-          'epoch': t, 
-          'loss': dev_results['loss'], 
-          'clean_acc': dev_results['clean_acc'], 
+          'epoch': t,
+          'loss': dev_results['loss'],
+          'clean_acc': dev_results['clean_acc'],
           'cert_acc': dev_results['cert_acc']
       }
       if augmenter:
@@ -178,7 +178,7 @@ def train(task_class, model, train_data, num_epochs, lr, device, dev_data=None,
       json.dump(epoch, outfile)
     with open(os.path.join(OPTS.out_dir, "all_epoch_stats.json"), "w") as outfile:
       json.dump(all_epoch_stats, outfile)
-    if ((save_best_only and is_best) 
+    if ((save_best_only and is_best)
         or (not save_best_only and epochs_per_save and (t+1) % epochs_per_save == 0)
         or t == num_epochs - 1):
       if save_best_only and is_best:
@@ -355,7 +355,7 @@ def main():
     print('Training finished.')
   print('Testing model.')
   if not OPTS.adv_only:
-    train_results = test(task_class, model, 'Train', train_data, device, 
+    train_results = test(task_class, model, 'Train', train_data, device,
                          batch_size=OPTS.batch_size)
     adversary = None
     if OPTS.adversary == 'exhaustive':
@@ -366,7 +366,7 @@ def main():
     elif OPTS.adversary == 'genetic':
       adversary = task_class.GeneticAdversary(attack_surface, num_iters=OPTS.adv_num_epochs,
                                               pop_size=OPTS.adv_pop_size)
-    dev_results = test(task_class, model, 'Dev', dev_data, device, 
+    dev_results = test(task_class, model, 'Dev', dev_data, device,
                        adversary=adversary, batch_size=OPTS.batch_size)
     results = {
         'train': train_results,
