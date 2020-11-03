@@ -15,6 +15,24 @@ import entailment
 import text_classification
 import vocabulary
 
+class Logger:
+  def __init__(self):
+    self.wandb = None
+
+  def maybe_setup(self, OPTS):
+    if OPTS.enable_wandb:
+      import wandb
+      self.wandb = wandb
+      tags = []
+      if OPTS.wandb_tag is not None:
+        tags.append(OPTS.wandb_tag)
+      self.wandb.init(config=OPTS, tags=tags)
+
+  def log(self, stats):
+    if self.wandb is not None:
+      self.wandb.log(stats)
+
+logger = Logger()
 
 # Maps string keys to modules that hold the relevant functions for training against
 # their tasks
@@ -150,6 +168,9 @@ def train(task_class, model, train_data, num_epochs, lr, device, dev_data=None,
       }
       if augmenter:
         dev_stats['aug_acc'] = dev_results['aug_acc']
+
+      logger.log(dev_stats)
+
       if dev_results['clean_acc'] > all_epoch_stats['acc']['best_dev']['clean'][-1]['clean_acc']:
         all_epoch_stats['acc']['best_dev']['clean'].append(dev_stats)
         if cert_frac == 0.0 and not augmenter:
@@ -187,6 +208,7 @@ def train(task_class, model, train_data, num_epochs, lr, device, dev_data=None,
       model_save_path = os.path.join(OPTS.out_dir, "model-checkpoint-{}.pth".format(t))
       print('Saving model to %s' % model_save_path)
       torch.save(model.state_dict(), model_save_path)
+      logger.log({'best': dev_stats})
 
   return model
 
@@ -247,7 +269,7 @@ def parse_args():
   parser = argparse.ArgumentParser()
   parser.add_argument('task', choices=TASK_CLASSES.keys())
   parser.add_argument('model', choices=['bow', 'cnn', 'lstm', 'decomp-attn', 'lstm-final-state'])
-  parser.add_argument('out_dir', help='Directory to store and load output')
+  parser.add_argument('--out-dir', type=str, help='Directory to store and load output')
   # Model
   parser.add_argument('--hidden-size', '-d', type=int, default=100)
   parser.add_argument('--kernel-size', '-k', type=int, default=3,
@@ -315,8 +337,10 @@ def parse_args():
   parser.add_argument('--load-ckpt', type=int, default=None,
                       help='Which checkpoint to load')
   # Other
-  parser.add_argument('--rng-seed', type=int, default=123456)
-  parser.add_argument('--torch-seed', type=int, default=1234567)
+  parser.add_argument('--random-seed', type=int, default=123456)
+  # parser.add_argument('--torch-seed', type=int, default=1234567)
+  parser.add_argument('--enable-wandb', action='store_true')
+  parser.add_argument('--wandb-tag', type=str, default=None)
 
   if len(sys.argv) == 1:
     parser.print_help()
@@ -325,9 +349,11 @@ def parse_args():
 
 
 def main():
-  random.seed(OPTS.rng_seed)
-  np.random.seed(OPTS.rng_seed)
-  torch.manual_seed(OPTS.torch_seed)
+  logger.maybe_setup(OPTS)
+
+  random.seed(OPTS.random_seed)
+  np.random.seed(OPTS.random_seed)
+  torch.manual_seed(OPTS.random_seed)
   torch.backends.cudnn.deterministic = True
   device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
   task_class = TASK_CLASSES[OPTS.task]
