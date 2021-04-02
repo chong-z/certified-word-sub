@@ -2,6 +2,9 @@
 mkdir -p data
 cd data
 
+# Counterfitted neighbors
+wget https://raw.githubusercontent.com/robinjia/certified-word-sub/master/data/counterfitted_neighbors.json
+
 # LM scores
 wget https://nlp.stanford.edu/data/robinjia/jia2019_cert_lm_scores.zip
 unzip jia2019_cert_lm_scores.zip
@@ -30,7 +33,7 @@ cp splits/imdb_test_files.txt aclImdb/test
 
 # SNLI
 mkdir -p snli
-cd snli 
+cd snli
 wget https://nlp.stanford.edu/projects/snli/snli_1.0.zip
 unzip snli_1.0.zip
 mv snli_1.0/*.jsonl .
